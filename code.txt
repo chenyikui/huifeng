@@ -1,0 +1,48 @@
+import org.apache.spark.sql.{DataFrame, SparkSession}
+import org.apache.spark.sql.functions._
+import org.apache.spark.sql.expressions.Window
+
+object YearCountProcessor {
+  
+  def processYearCounts(df: DataFrame, size: Int): DataFrame = {
+    // 步骤3：按年份排序
+    val orderedDF = df.orderBy($"extracted_year".desc)
+
+    // 计算累积计数
+    val windowSpec = Window.partitionBy("peer_id").orderBy($"extracted_year".desc)
+    val cumulativeCounts = orderedDF.withColumn("cumulative_count", sum("year_counts").over(windowSpec))
+
+    // 根据累积计数进行过滤并返回
+    cumulativeCounts.filter($"cumulative_count" >= size).select("peer_id", "extracted_year")
+  }
+
+  def main(args: Array[String]): Unit = {
+    val spark = SparkSession.builder()
+      .appName("YearCountProcessor")
+      .master("local[*]")
+      .getOrCreate()
+
+    import spark.implicits._
+
+    // 示例DataFrame
+    val data = Seq(
+      ("AE686(AE)", "7", "AE686", 2022),
+      ("AE686(AE)", "8", "BH2740", 2021),
+      ("AE686(AE)", "9", "EG999", 2021),
+      ("AE686(AE)", "10", "AE0908", 2023),
+      ("AE686(AE)", "11", "QA402", 2022),
+      ("AE686(AE)", "12", "OA691", 2022),
+      ("AE686(AE)", "12", "OB691", 2022),
+      ("AE686(AE)", "12", "OC691", 2019),
+      ("AE686(AE)", "12", "OD691", 2017)
+    )
+
+    val df = data.toDF("peer_id", "sub_id", "id", "extracted_year")
+
+    // 应用处理函数
+    val processedDF = processYearCounts(df, 5)
+
+    // 显示结果
+    processedDF.show()
+  }
+}
